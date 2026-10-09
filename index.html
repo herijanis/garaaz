@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Garaaž">
+<meta name="theme-color" content="#12171d">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Meie Garaaž</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow phone-first column; plate chips pick the car, then car card → ask → log */
+:root{
+  --bg:#eef0f2; --panel:#ffffff; --ink:#16202b; --muted:#5b6672; --line:#d5dade;
+  --accent:#e2a400; --accent-ink:#1b1400; --plate-blue:#1f4fa3;
+  --ok:#2f7d4f; --warn:#b26a00; --bad:#b4342c; --info:#2b5f9e;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --panel:#1b222a; --ink:#e6eaee; --muted:#9aa5b0; --line:#2c3640;
+  --accent:#f0b525; --accent-ink:#1b1400; --plate-blue:#3d6fc4;
+  --ok:#5fbf86; --warn:#e3a145; --bad:#e8726a; --info:#7fa9e0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --panel:#1b222a; --ink:#e6eaee; --muted:#9aa5b0; --line:#2c3640;
+  --accent:#f0b525; --accent-ink:#1b1400; --plate-blue:#3d6fc4;
+  --ok:#5fbf86; --warn:#e3a145; --bad:#e8726a; --info:#7fa9e0; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);padding-inline:16px;padding-block:20px 48px}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2{font-family:var(--f-display);font-weight:700;letter-spacing:.02em;text-transform:uppercase;margin:0;text-wrap:balance}
+h1{font-size:2rem;line-height:1}
+h2{font-size:1.25rem}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sub{color:var(--muted);font-size:.85rem;margin:0}
+.mono{font-family:var(--f-mono);font-size:.9em;letter-spacing:.02em}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* plates */
+.plates{display:flex;gap:10px;flex-wrap:wrap}
+.plate{display:flex;align-items:stretch;border:2px solid var(--ink);border-radius:5px;background:#fff;color:#111;padding:0;overflow:hidden;opacity:.55;transition:opacity .15s}
+.plate[aria-pressed="true"]{opacity:1;box-shadow:0 0 0 3px var(--accent)}
+.plate .eu{background:var(--plate-blue);color:#fff;font:600 .6rem/1 var(--f-body);display:flex;align-items:flex-end;justify-content:center;padding:4px 4px;width:18px}
+.plate .num{font:700 1.25rem/1 var(--f-display);letter-spacing:.08em;padding:6px 10px}
+.addcar{border:2px dashed var(--line);background:transparent;border-radius:5px;padding:0 12px;color:var(--muted)}
+
+/* panels */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.car-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}
+.car-name{font:700 1.5rem/1.1 var(--f-display);text-transform:uppercase}
+dl.spec{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px 16px;margin:0}
+dl.spec div{min-width:0}
+dl.spec dt{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+dl.spec dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.note{font-size:.85rem;color:var(--muted);margin:0}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.links a,.btn-ghost{font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:4px 12px;color:var(--ink);text-decoration:none;background:transparent}
+.links a:hover,.btn-ghost:hover{border-color:var(--ink)}
+
+/* ask */
+.ask-row{display:flex;gap:8px;flex-wrap:wrap}
+.ask-row input{flex:1 1 220px;min-width:0}
+input,select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;width:100%}
+textarea{resize:vertical;min-height:60px}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:9px 16px;font-weight:600}
+.btn:disabled{opacity:.5;cursor:default}
+.lead{margin:0;font-weight:500;overflow-wrap:anywhere}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.opt-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.opt-name{font-weight:600}
+.opt-code{font-family:var(--f-mono);font-size:1.05rem;letter-spacing:.03em;overflow-wrap:anywhere}
+.opt-price{font-family:var(--f-display);font-weight:700;font-size:1.2rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.opt-why{margin:0;font-size:.85rem;color:var(--muted)}
+.tag{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.shops{display:flex;gap:6px;flex-wrap:wrap}
+.shops a{font-size:.8rem;font-weight:600;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;color:var(--ink);text-decoration:none}
+.shops a:hover{border-color:var(--accent)}
+.shops a.used{border-style:dashed}
+.eyebrow{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.check{margin:4px 0 0;padding-left:20px;font-size:.88rem}
+
+/* log */
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.log li{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 0;border-top:1px solid var(--line)}
+.log li:first-child{border-top:0}
+.pill{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;border-radius:999px;padding:3px 8px;border:1px solid currentColor;align-self:start;white-space:nowrap}
+.s-vaja{color:var(--bad)} .s-tellitud{color:var(--info)} .s-tehtud{color:var(--ok)} .s-vale{color:var(--warn)}
+.log .body{min-width:0;display:flex;flex-direction:column;gap:2px}
+.log .title{font-weight:600}
+.log .meta{font-size:.82rem;color:var(--muted);overflow-wrap:anywhere}
+.log .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.log .acts select{width:auto;padding:3px 6px;font-size:.8rem}
+.log .acts button{font-size:.8rem;background:none;border:0;color:var(--muted);text-decoration:underline;padding:0}
+.log .acts button.danger{color:var(--bad)}
+.empty{color:var(--muted);font-size:.9rem;margin:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:var(--muted);min-width:0}
+details summary{cursor:pointer;font-weight:600}
+.status{font-size:.85rem;color:var(--muted)}
+.banner{background:var(--panel);border:1px solid var(--bad);color:var(--bad);border-radius:8px;padding:12px;font-size:.9rem}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+a.buy{align-self:flex-start;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:.85rem;border-radius:6px;padding:6px 12px;text-decoration:none}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Meie Garaaž</h1>
+    <p class="sub">Õige osa esimese korraga.</p>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <nav class="plates" id="plates" aria-label="Autod">
+    <span class="empty" id="platesEmpty">Laen autosid…</span>
+  </nav>
+
+  <section class="panel" id="carPanel" hidden>
+    <div class="car-head">
+      <span class="car-name" id="carName"></span>
+      <button class="btn-ghost" id="editCar" type="button">Muuda andmeid</button>
+    </div>
+    <dl class="spec" id="carSpec"></dl>
+    <p class="note" id="carNotes"></p>
+    <div class="links">
+      <a id="lnkTk" href="https://eteenindus.mnt.ee/public/soidukTaustakontroll.jsf?lang=et" target="_blank" rel="noopener">Transpordiameti taustakontroll ↗</a>
+      <a id="lnkVin" href="#" target="_blank" rel="noopener">VIN-kataloog (Partsouq) ↗</a>
+    </div>
+  </section>
+
+  <section class="panel" id="askPanel" hidden>
+    <h2>Vajan osa / mis viga?</h2>
+    <form class="ask-row" id="askForm">
+      <input id="askInput" placeholder="nt vasak tagatule pirn, P0201, esipidurid" autocomplete="off">
+      <button class="btn" id="askBtn" type="submit">Küsi</button>
+    </form>
+    <p class="status" id="askStatus" hidden></p>
+    <p class="lead" id="answer" hidden></p>
+    <div class="opts" id="opts"></div>
+    <div id="checkBox" hidden>
+      <span class="eyebrow">Enne ostu kontrolli</span>
+      <ul class="check" id="checkList"></ul>
+    </div>
+  </section>
+
+  <section class="panel" id="logPanel" hidden>
+    <div class="car-head"><h2>Pooleli ja tehtud</h2></div>
+    <ul class="log" id="log"></ul>
+    <details id="addDetails">
+      <summary>+ Lisa kirje</summary>
+      <form id="logForm" class="grid2" style="margin-top:12px">
+        <label style="grid-column:1/-1">Mis?<input id="lTitle" required placeholder="nt vasak tagatule pirn"></label>
+        <label>Olek<select id="lStatus">
+          <option value="vaja">Vaja teha</option><option value="tellitud">Tellitud</option>
+          <option value="tehtud">Tehtud</option><option value="vale">Vale osa tuli</option></select></label>
+        <label>Kuupäev<input id="lDate" type="date"></label>
+        <label>Osa tähis / OEM nr<input id="lPart" class="mono" placeholder="nt P21/4W"></label>
+        <label>Hind €<input id="lPrice" inputmode="decimal" placeholder="0"></label>
+        <label>Kust<input id="lShop" placeholder="nt Autodoc"></label>
+        <label style="grid-column:1/-1">Märkmed<textarea id="lNote"></textarea></label>
+        <div><button class="btn" type="submit">Salvesta</button></div>
+      </form>
+    </details>
+  </section>
+
+  <section class="panel" id="carFormPanel" hidden>
+    <h2 id="carFormTitle">Lisa auto</h2>
+    <p class="note">Numbrimärk, mootorikood ja läbisõit tulevad Transpordiameti taustakontrollist.</p>
+    <form id="carForm" class="grid2">
+      <label>Numbrimärk<input id="cPlate" required class="mono" placeholder="553BHJ"></label>
+      <label>Kelle oma<input id="cOwner" placeholder="nt minu, isa"></label>
+      <label>Mark<input id="cMake" required placeholder="Volkswagen"></label>
+      <label>Mudel<input id="cModel" required placeholder="Golf 5 (1K)"></label>
+      <label style="grid-column:1/-1">VIN<input id="cVin" class="mono" maxlength="17" placeholder="17 märki"></label>
+      <label>Mootorikood<input id="cEngine" class="mono" placeholder="BRU"></label>
+      <label>Mootor<input id="cMotor" placeholder="1.9 TDI 66 kW"></label>
+      <label>Esmane reg.<input id="cFirst" placeholder="25.05.2005"></label>
+      <label>Läbisõit km<input id="cKm" inputmode="numeric"></label>
+      <label>Käigukast<input id="cGear" placeholder="manuaal"></label>
+      <label>Kere<input id="cBody" placeholder="luukpära"></label>
+      <label style="grid-column:1/-1">Märkmed<textarea id="cNotes"></textarea></label>
+      <div class="links"><button class="btn" type="submit">Salvesta auto</button><button class="btn-ghost" type="button" id="cancelCar">Tühista</button></div>
+    </form>
+  </section>
+</div>
+
+<script src="app.js?v=1"></script>
+</body>
+</html>
