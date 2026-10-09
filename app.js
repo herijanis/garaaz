@@ -26,6 +26,31 @@
   const imgUrl = id => `${API}/api/img/${encodeURIComponent(id)}?k=${encodeURIComponent(key||"")}`;
   const num = s => parseFloat(String(s ?? "").replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
 
+  const buzz = () => { try{ navigator.vibrate && navigator.vibrate(8); }catch(e){} };
+  function toast(msg){
+    const t = $("toast"); $("toastText").textContent = msg;
+    t.classList.add("show"); buzz();
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+  function openSheet(sheet, bg){
+    if(!sheet.hidden) return;
+    sheet.hidden = bg.hidden = false;
+    sheet.getBoundingClientRect();
+    sheet.classList.add("open"); bg.classList.add("open");
+  }
+  function closeSheetEl(sheet, bg){
+    if(sheet.hidden) return;
+    sheet.classList.remove("open"); bg.classList.remove("open");
+    setTimeout(() => { if(!sheet.classList.contains("open")) sheet.hidden = bg.hidden = true; }, 450);
+  }
+  function countUp(el, to, fmt){
+    const from = Number(el.dataset.v || 0); el.dataset.v = to;
+    if(matchMedia("(prefers-reduced-motion: reduce)").matches || from === to){ el.textContent = fmt(to); return; }
+    const t0 = performance.now(), d = 900;
+    const step = now => { const k = Math.min(1, (now - t0) / d), e = 1 - Math.pow(1 - k, 4); el.textContent = fmt(from + (to - from) * e); if(k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+
   async function api(path, method = "GET", body){
     const r = await fetch(API + path, {method, headers:{"Content-Type":"application/json","X-Key":key||""}, body: body ? JSON.stringify(body) : undefined});
     const data = await r.json().catch(() => ({}));
@@ -38,9 +63,9 @@
       cars = Object.values(d.cars || {});
       logs = Object.values(d.log || {});
       if(!cars.some(c => c.id === selId)) selId = cars[0]?.id || null;
-      banner(""); renderAll();
+      banner(""); $("skel").hidden = true; renderAll();
     }catch(e){
-      $("plates").innerHTML = "";
+      $("plates").innerHTML = ""; $("skel").hidden = true;
       banner(e.status === 401 ? "See link on vale või vana. Küsi õige link." : "Andmed ei laadinud. Kontrolli internetti ja laadi leht uuesti.");
     }
   }
@@ -48,23 +73,24 @@
 
   // ---------- kes ma olen ----------
   function renderWho(){
-    $("whoCard").hidden = $("whoBg").hidden = !!who || !key;
+    if(!who && key) openSheet($("whoCard"), $("whoBg")); else closeSheetEl($("whoCard"), $("whoBg"));
     $("whoName").textContent = who || "";
     $("whoAvatar").textContent = (who || "?").slice(0,1).toUpperCase();
     $("whoChange").hidden = !who;
   }
   $("whoCard").querySelectorAll("[data-who]").forEach(b => b.onclick = () => {
     if(b.dataset.who === "?"){ $("whoOther").hidden = false; $("whoInput").focus(); return; }
-    who = b.dataset.who; store.set("garaaz.who", who); renderWho();
+    who = b.dataset.who; store.set("garaaz.who", who); renderWho(); toast("Tere, " + who + "!");
   });
   $("whoOther").onsubmit = e => { e.preventDefault(); const v = $("whoInput").value.trim(); if(v){ who = v; store.set("garaaz.who", v); renderWho(); } };
   $("whoChange").onclick = () => { who = null; renderWho(); };
 
   // ---------- autod ----------
+  const EU_STARS = `<svg viewBox="0 0 20 20" aria-hidden="true">${Array.from({length:12}, (_, i) => { const a = i * Math.PI / 6; return `<circle cx="${(10 + 7 * Math.cos(a)).toFixed(2)}" cy="${(10 + 7 * Math.sin(a)).toFixed(2)}" r="1.3" fill="#ffd400"/>`; }).join("")}</svg>`;
   function renderPlates(){
     const nav = $("plates");
     nav.innerHTML = cars.map(c =>
-      `<button class="plate" type="button" data-id="${esc(c.id)}" aria-pressed="${c.id===selId}"><span class="eu">EST</span><span class="num">${esc(c.plate)}</span></button>`
+      `<button class="plate" type="button" data-id="${esc(c.id)}" aria-pressed="${c.id===selId}"><span class="eu">${EU_STARS}<b>EST</b></span><span class="num">${esc(c.plate)}</span></button>`
     ).join("") + `<button class="addcar" type="button" id="addCarBtn">+ auto</button>`;
     if(!cars.length) nav.insertAdjacentHTML("afterbegin", `<span class="empty">Autosid veel pole. Lisa esimene.&nbsp;</span>`);
     nav.querySelectorAll(".plate").forEach(b => b.onclick = () => select(b.dataset.id));
@@ -79,7 +105,7 @@
     $("heroMake").textContent = c.make || "";
     $("heroName").textContent = c.model || c.plate;
     $("carLine").textContent = [c.motor, c.engine && `mootor ${c.engine}`, c.gear].filter(Boolean).join(" · ");
-    $("statKm").textContent = c.km ? Number(c.km).toLocaleString("et-EE") : "–";
+    if(c.km) countUp($("statKm"), Number(c.km), v => Math.round(v).toLocaleString("et-EE")); else $("statKm").textContent = "–";
     const insp = String(c.inspection || "").match(/(\d{1,2})\.(\d{4})|(\d{4})-(\d{1,2})/);
     $("statInsp").textContent = insp ? (insp[1] ? `${insp[1].padStart(2,"0")}.${insp[2]}` : `${insp[4].padStart(2,"0")}.${insp[3]}`) : "–";
     const spec = [["Numbrimärk",c.plate,1],["VIN",c.vin,1],["Mootorikood",c.engine,1],["Mootor",c.motor],["Esmane reg.",c.first],
@@ -111,7 +137,7 @@
     if(!all.length){
       ul.innerHTML = `<li class="due-empty">Tähtaegu pole veel sisestatud. Vajuta "Muuda tähtaegu" ja pane ülevaatus, kindlustus ja viimane õlivahetus.</li>`;
     } else {
-      ul.innerHTML = all.map(d => `<li class="due ${d.level}"><span class="dot" aria-hidden="true"></span><span>${esc(d.text)}</span></li>`).join("");
+      ul.innerHTML = all.map((d, i) => `<li class="due ${d.level}" style="--i:${i}"><span class="dot" aria-hidden="true"></span><span>${esc(d.text)}</span></li>`).join("");
     }
     $("pushBtn").hidden = !("serviceWorker" in navigator && "PushManager" in window) || store.get("garaaz.push") === "on";
     const first = all.find(d => d.level !== "ok");
@@ -125,7 +151,7 @@
     e.preventDefault();
     const c = car(); const km = $("kmInput").value.replace(/\D/g, "");
     if(!c || !km) return;
-    if(await write(() => api("/api/car/"+encodeURIComponent(c.id), "POST", {car:{km, kmDate:today()}}))) $("kmForm").hidden = true;
+    if(await write(() => api("/api/car/"+encodeURIComponent(c.id), "POST", {car:{km, kmDate:today()}}))){ $("kmForm").hidden = true; toast("Läbisõit uuendatud"); }
   };
 
   // ---------- teavitused ----------
@@ -148,7 +174,7 @@
       await api("/api/push/subscribe", "POST", { sub: sub.toJSON(), who });
       await api("/api/push/test", "POST", { endpoint: sub.endpoint });
       store.set("garaaz.push", "on");
-      b.hidden = true;
+      b.hidden = true; toast("Teavitused sees");
     }catch(e){
       banner("Teavitusi ei õnnestunud lubada sellel telefonil.");
     }finally{ b.disabled = false; b.textContent = "Luba teavitused telefoni"; }
@@ -169,14 +195,14 @@
     $("costLine").innerHTML = `<span class="muted">Kulud ${year}</span><span class="big">${eur(spent)}</span>` +
       (cars.length > 1 ? `<span class="muted" style="flex-basis:100%">Kõik autod kokku: <b>${eur(allYear)}</b></span>` : "");
     $("statYear").textContent = year;
-    $("statCost").textContent = Math.round(spent).toLocaleString("et-EE") + " €";
+    countUp($("statCost"), Math.round(spent), v => Math.round(v).toLocaleString("et-EE"));
     if(!mine.length){ ul.innerHTML = `<li><p class="empty">Siin pole veel midagi. Vajuta "+ Lisa töö".</p></li>`; return; }
-    ul.innerHTML = mine.map(l => {
+    ul.innerHTML = mine.map((l, i) => {
       const meta = [fmtDate(l.date), l.part && `<span class="mono">${esc(l.part)}</span>`, l.price && `${esc(l.price)} €`, l.shop && esc(l.shop), l.by && `lisas ${esc(l.by)}`].filter(Boolean).join(" · ");
       const link = /^https:\/\//.test(l.note||"") ? l.note : "";
       const photos = (l.photos||[]).map(p => `<a href="${esc(imgUrl(p))}" target="_blank" rel="noopener"><img src="${esc(imgUrl(p))}" alt="Pilt" loading="lazy"></a>`).join("");
       const open = l.status === "vaja" || l.status === "tellitud";
-      return `<li class="item s-${esc(l.status)}" data-id="${esc(l.id)}">
+      return `<li class="item s-${esc(l.status)}" style="--i:${i}" data-id="${esc(l.id)}">
           <span class="title">${esc(l.title)}</span>
           ${meta?`<span class="meta">${meta}</span>`:""}
           ${link?`<a class="meta" href="${esc(link)}" target="_blank" rel="noopener">Ava poes ↗</a>`:l.note?`<span class="meta">${esc(l.note)}</span>`:""}
@@ -224,11 +250,11 @@
     $("carFormTitle").textContent = dueOnly ? "Tähtajad" : c ? "Muuda auto andmeid" : "Lisa auto";
     for(const [k,id] of Object.entries(CF)) $(id).value = c ? (c[k] ?? "") : "";
     $("carFormPanel").classList.toggle("due-only", !!dueOnly);
-    $("carFormPanel").hidden = $("sheetBg").hidden = false;
     $("carFormPanel").scrollTop = 0;
+    openSheet($("carFormPanel"), $("sheetBg"));
   }
   $("editCar").onclick = () => openCarForm(car());
-  const closeSheet = () => { $("carFormPanel").hidden = $("sheetBg").hidden = true; };
+  const closeSheet = () => closeSheetEl($("carFormPanel"), $("sheetBg"));
   $("cancelCar").onclick = closeSheet;
   $("sheetBg").onclick = closeSheet;
   $("carForm").onsubmit = async e => {
@@ -241,7 +267,7 @@
     const id = editId || data.plate.replace(/[^A-Z0-9]/g,"");
     if(!id){ banner("Numbrimärk on puudu."); return; }
     selId = id; store.set("garaaz.sel", id);
-    if(await write(() => api("/api/car/"+encodeURIComponent(id), "POST", {car:data}))) closeSheet();
+    if(await write(() => api("/api/car/"+encodeURIComponent(id), "POST", {car:data}))){ closeSheet(); toast("Salvestatud"); }
   };
 
   // ---------- töö vorm ----------
@@ -254,7 +280,7 @@
     if(!entry.title) return;
     if(await write(() => api("/api/log", "POST", {entry}))){
       ["lTitle","lPart","lPrice","lShop","lNote"].forEach(id => $(id).value = "");
-      $("logForm").hidden = true;
+      $("logForm").hidden = true; toast("Töö lisatud");
     }
   };
   $("addLogBtn").onclick = () => { $("logForm").hidden = false; $("lTitle").focus(); };
@@ -292,7 +318,7 @@
       const used = o.tuup === "kasutatud";
       const link = safeUrl(o.link);
       const badges = [i === 0 && link ? `<span class="badge best">Soovitan</span>` : "", TYPE[o.tuup] ? `<span class="badge">${TYPE[o.tuup]}</span>` : "", o.pood ? `<span>${esc(o.pood)}</span>` : ""].join("");
-      return `<div class="opt${i === 0 && link ? " best" : ""}">
+      return `<div class="opt${i === 0 && link ? " best" : ""}" style="--i:${i}">
         <div class="opt-top"><span class="opt-name">${esc(o.nimi||"")}</span>${o.hind?`<span class="opt-price">${esc(o.hind)}</span>`:""}</div>
         <div class="opt-meta">${badges}${code?`<span class="opt-code">${esc(code)}</span>`:""}</div>
         ${o.miks?`<p class="opt-why">${esc(o.miks)}</p>`:""}
@@ -308,7 +334,7 @@
       b.disabled = true; b.textContent = "Salvestan…";
       const entry = {carId:c.id, title:o.nimi || $("askInput").value.trim(), status:"vaja", date:today(),
         part:String(o.kood||""), price:String(o.hind||"").replace(/\s*€/,""), shop:o.pood||"", note:safeUrl(o.link), by:who||""};
-      if(await write(() => api("/api/log", "POST", {entry}))){ b.textContent = "✓ Lisatud"; b.classList.add("done"); }
+      if(await write(() => api("/api/log", "POST", {entry}))){ b.textContent = "✓ Lisatud"; b.classList.add("done"); toast("Lisatud töödesse"); }
       else { b.disabled = false; b.textContent = "+ Tööde alla"; }
     });
     const chk = Array.isArray(r.kontrolli) ? r.kontrolli.slice(0,3) : [];
@@ -410,7 +436,7 @@
       if(act === "receipt"){
         b.disabled = true;
         const entries = r.read.map(x => ({carId:c.id, title:x.nimi, status:"tehtud", date:r.kuupaev || today(), part:x.kood||"", price:String(x.hind||""), shop:r.pood||"", by:who||""}));
-        if(await write(() => api("/api/log", "POST", {entries}))){ b.textContent = "✓ Lisatud"; }
+        if(await write(() => api("/api/log", "POST", {entries}))){ b.textContent = "✓ Lisatud"; toast("Tšekk lisatud töödesse"); }
         else b.disabled = false;
       }
       if(act === "keep"){
@@ -419,18 +445,27 @@
           const { id: pid } = await api("/api/img", "POST", {image});
           const title = r.liik === "tuli" ? "Armatuurlaua tuli: " + (r.vastus||"").slice(0,60) : r.liik === "kahjustus" ? "Kahjustus: " + (r.vastus||"").slice(0,60) : r.nimi || "Pilt";
           await write(() => api("/api/log", "POST", {entry:{carId:c.id, title, status: r.liik === "kahjustus" || r.liik === "tuli" ? "vaja" : "tehtud", date:today(), part:r.kood||"", note:r.vastus||"", photos:[pid], by:who||""}}));
-          b.textContent = "✓ Salvestatud";
+          b.textContent = "✓ Salvestatud"; toast("Pilt salvestatud");
         }catch(e){ b.disabled = false; b.textContent = "Salvesta pilt tööde alla"; banner("Salvestamine ei õnnestunud."); }
       }
     });
   }
 
   // ---------- vahekaardid ----------
+  const TABS = ["osad", "hooldus", "tood", "auto"];
+  let curTab = null;
   function showTab(t){
+    if(!TABS.includes(t)) t = "osad";
+    const from = TABS.indexOf(curTab), to = TABS.indexOf(t);
     document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
-    document.querySelectorAll(".tab-panel").forEach(p => p.hidden = p.dataset.tab !== t);
-    store.set("garaaz.tab", t);
-    scrollTo({top: 0, behavior: "smooth"});
+    $("tabInd").style.transform = `translateX(${to * 100}%)`;
+    document.querySelectorAll(".tab-panel").forEach(p => {
+      const on = p.dataset.tab === t;
+      p.hidden = !on;
+      if(on && curTab !== null && from !== to){ p.classList.toggle("from-left", to < from); p.style.animation = "none"; p.offsetHeight; p.style.animation = ""; }
+    });
+    if(curTab !== null && from !== to){ buzz(); scrollTo({top: 0, behavior: "smooth"}); }
+    curTab = t; store.set("garaaz.tab", t);
   }
   document.querySelectorAll(".tab").forEach(b => b.onclick = () => showTab(b.dataset.tab));
   showTab(store.get("garaaz.tab") || "osad");
@@ -445,7 +480,7 @@
   applyTheme(store.get("garaaz.theme") === "dark" ? "dark" : "light");
 
   // ---------- iseuuendus: kui uus versioon on üleval, laeme selle (mööda vahemälust) ----------
-  const APP_V = "7";
+  const APP_V = "8";
   async function checkUpdate(){
     try{
       const v = (await (await fetch("version.txt?" + Date.now(), {cache:"no-store"})).text()).trim();
