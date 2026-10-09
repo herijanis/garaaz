@@ -435,6 +435,17 @@
   document.querySelectorAll(".tab").forEach(b => b.onclick = () => showTab(b.dataset.tab));
   showTab(store.get("garaaz.tab") || "osad");
 
+  // ---------- iseuuendus: kui uus versioon on üleval, laeme selle (mööda vahemälust) ----------
+  const APP_V = "6";
+  async function checkUpdate(){
+    try{
+      const v = (await (await fetch("version.txt?" + Date.now(), {cache:"no-store"})).text()).trim();
+      if(v && v !== APP_V) location.replace(location.pathname + "?v=" + v);
+    }catch(e){}
+  }
+  checkUpdate();
+  addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") checkUpdate(); });
+
   // ---------- algus ----------
   if(!key){ banner("Ava äpp lingiga, mille said (seal on sinu pere võti)."); $("plates").innerHTML = ""; }
   else { refresh(); addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") refresh(); }); }
