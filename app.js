@@ -51,8 +51,11 @@
   function renderCar(){
     const c = car();
     ["carPanel","askPanel","logPanel"].forEach(id => $(id).hidden = !c);
-    if(!c) return;
-    $("carName").textContent = `${c.make||""} ${c.model||""}`.trim();
+    if(!c){ $("carLine").hidden = true; return; }
+    $("carName").textContent = "Auto andmed (VIN, mootor, läbisõit)";
+    const line = [c.motor || c.engine, c.km ? Number(c.km).toLocaleString("et-EE")+" km" : ""].filter(Boolean).join(" · ");
+    $("carLine").innerHTML = `<b>${esc(`${c.make||""} ${c.model||""}`.trim())}</b>${line ? " · " + esc(line) : ""}`;
+    $("carLine").hidden = false;
     const spec = [["Numbrimärk",c.plate,1],["VIN",c.vin,1],["Mootorikood",c.engine,1],["Mootor",c.motor],["Esmane reg.",c.first],
       ["Läbisõit",c.km?Number(c.km).toLocaleString("et-EE")+" km":""],["Käigukast",c.gear],["Kere",c.body],["Kelle oma",c.owner]];
     $("carSpec").innerHTML = spec.filter(s => s[1]).map(([k,v,m]) => `<div><dt>${k}</dt><dd${m?' class="mono"':''}>${esc(v)}</dd></div>`).join("");
@@ -69,20 +72,17 @@
       const open = s => s === "vaja" || s === "tellitud" ? 0 : 1;
       return open(a.status) - open(b.status) || String(b.date||"").localeCompare(String(a.date||""));
     });
-    if(!mine.length){ ul.innerHTML = `<li><span></span><p class="empty">Kirjeid pole. Lisa siia, mis vaja teha või mis tehtud sai.</p></li>`; return; }
+    if(!mine.length){ ul.innerHTML = `<li><p class="empty">Siin pole veel midagi. Vajuta "+ Lisa töö".</p></li>`; return; }
     ul.innerHTML = mine.map(l => {
       const meta = [fmtDate(l.date), l.part && `<span class="mono">${esc(l.part)}</span>`, l.price && `${esc(l.price)} €`, l.shop && esc(l.shop)].filter(Boolean).join(" · ");
-      return `<li data-id="${esc(l.id)}">
-        <span class="pill s-${esc(l.status)}">${STATUS[l.status]||esc(l.status)}</span>
-        <div class="body">
+      return `<li class="item s-${esc(l.status)}" data-id="${esc(l.id)}">
           <span class="title">${esc(l.title)}</span>
           ${meta?`<span class="meta">${meta}</span>`:""}
           ${l.note?`<span class="meta">${esc(l.note)}</span>`:""}
           <div class="acts">
-            <select aria-label="Muuda olekut">${Object.entries(STATUS).map(([k,v]) => `<option value="${k}"${k===l.status?" selected":""}>${v}</option>`).join("")}</select>
+            <select aria-label="Olek">${Object.entries(STATUS).map(([k,v]) => `<option value="${k}"${k===l.status?" selected":""}>${v}</option>`).join("")}</select>
             <button type="button" class="del">Kustuta</button>
-          </div>
-        </div></li>`;
+          </div></li>`;
     }).join("");
     ul.querySelectorAll("li[data-id]").forEach(li => {
       const id = li.dataset.id;
@@ -139,9 +139,12 @@
     if(!entry.title) return;
     if(await write(() => api("/api/log", "POST", {entry}))){
       ["lTitle","lPart","lPrice","lShop","lNote"].forEach(id => $(id).value = "");
-      $("addDetails").open = false;
+      $("logForm").hidden = true;
     }
   };
+
+  $("addLogBtn").onclick = () => { $("logForm").hidden = false; $("lTitle").focus(); };
+  $("cancelLog").onclick = () => { $("logForm").hidden = true; };
 
   // ask
   const G = s => "https://www.google.com/search?q=" + encodeURIComponent(s);
@@ -163,23 +166,36 @@
     const list = used ? USED : SHOPS;
     return list.map(([n,f]) => `<a${used?' class="used"':''} href="${esc(f(code, base))}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join("");
   }
+  let lastOpts = [];
   function renderAnswer(r, c){
     const base = `${c.make||""} ${c.model||""}`.trim();
     $("answer").textContent = r.vastus || ""; $("answer").hidden = !r.vastus;
-    const opts = Array.isArray(r.variandid) ? r.variandid.slice(0,4) : [];
-    $("opts").innerHTML = opts.map(o => {
+    const opts = lastOpts = Array.isArray(r.variandid) ? r.variandid.slice(0,4) : [];
+    $("opts").innerHTML = opts.map((o, i) => {
       const code = String(o.kood || "").trim();
       const q = code || `${base} ${o.nimi||""}`.trim();
       const used = o.tuup === "kasutatud";
       const link = safeUrl(o.link);
+      const badges = [i === 0 && link ? `<span class="badge best">Soovitan</span>` : "", TYPE[o.tuup] ? `<span class="badge">${TYPE[o.tuup]}</span>` : "", o.pood ? `<span>${esc(o.pood)}</span>` : ""].join("");
       return `<div class="opt">
-        <div class="opt-top"><span class="opt-name">${esc(o.nimi||"")}${TYPE[o.tuup]?`<span class="tag">${TYPE[o.tuup]}</span>`:""}</span>${o.hind?`<span class="opt-price">${esc(o.hind)}</span>`:""}</div>
-        ${code?`<span class="opt-code">${esc(code)}</span>`:""}
+        <div class="opt-top"><span class="opt-name">${esc(o.nimi||"")}</span>${o.hind?`<span class="opt-price">${esc(o.hind)}</span>`:""}</div>
+        <div class="opt-meta">${badges}${code?`<span class="opt-code">${esc(code)}</span>`:""}</div>
         ${o.miks?`<p class="opt-why">${esc(o.miks)}</p>`:""}
-        ${link?`<a class="buy" href="${esc(link)}" target="_blank" rel="noopener">Vaata ${esc(o.pood||"poes")} ↗</a>`:""}
-        <div class="shops">${shopLinks(q, base, used)}</div>
+        <div class="opt-acts">
+          ${link?`<a class="buy" href="${esc(link)}" target="_blank" rel="noopener">Ava poes →</a>`:""}
+          <button type="button" class="save" data-i="${i}">+ Tööde alla</button>
+        </div>
+        <details class="more"><summary>Otsi teistest poodidest</summary><div class="shops">${shopLinks(q, base, used)}</div></details>
       </div>`;
     }).join("");
+    $("opts").querySelectorAll(".save").forEach(b => b.onclick = async () => {
+      const o = lastOpts[+b.dataset.i]; if(!o || b.disabled) return;
+      b.disabled = true; b.textContent = "Salvestan…";
+      const entry = {carId:c.id, title:o.nimi || $("askInput").value.trim(), status:"vaja", date:new Date().toISOString().slice(0,10),
+        part:String(o.kood||""), price:String(o.hind||"").replace(/\s*€/,""), shop:o.pood||"", note:safeUrl(o.link)};
+      if(await write(() => api("/api/log", "POST", {entry}))){ b.textContent = "✓ Lisatud"; b.classList.add("done"); }
+      else { b.disabled = false; b.textContent = "+ Tööde alla"; }
+    });
     const chk = Array.isArray(r.kontrolli) ? r.kontrolli.slice(0,3) : [];
     $("checkList").innerHTML = chk.map(t => `<li>${esc(t)}</li>`).join("");
     $("checkBox").hidden = !chk.length;
@@ -196,7 +212,8 @@
     $("opts").innerHTML = ""; $("answer").hidden = true; $("checkBox").hidden = true;
     const st = $("askStatus"); st.hidden = false; $("askBtn").disabled = true;
     const t0 = Date.now();
-    const tick = setInterval(() => { st.textContent = `Otsin poodidest päris pakkumisi… ${Math.round((Date.now()-t0)/1000)} s`; }, 500);
+    const steps = ["Leian sinu autole õige osa…", "Vaatan Eesti poode läbi…", "Võrdlen hindu…", "Kohe valmis…"];
+    const tick = setInterval(() => { const sec = Math.round((Date.now()-t0)/1000); $("askStatusText").textContent = `${steps[Math.min(3, Math.floor(sec/15))]} (${sec} s, võtab umbes minuti)`; }, 500);
     try{
       const r = await api("/api/ask", "POST", {carId:c.id, q});
       if(r && typeof r === "object") renderAnswer(r, c); else fallback(c, q, "Vastus tuli segane. Otsi poodidest otse:");
@@ -204,6 +221,8 @@
       fallback(c, q, (err.message && err.status !== 500 ? err.message + " " : "Vastust ei tulnud. ") + "Otsi poodidest otse:");
     }finally{ clearInterval(tick); st.hidden = true; $("askBtn").disabled = false; asking = false; }
   };
+
+  $("chips").querySelectorAll(".chip").forEach(ch => ch.onclick = () => { $("askInput").value = ch.textContent; $("askForm").requestSubmit(); });
 
   // boot
   if(!key){ banner("Ava äpp lingiga, mille said (seal on sinu pere võti)."); $("plates").innerHTML = ""; }
