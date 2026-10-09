@@ -9,6 +9,7 @@
   };
   selId = store.get("garaaz.sel");
   who = store.get("garaaz.who");
+  if(who === "Herijan" || who === "Isa"){ who = who === "Herijan" ? "Richard" : "Janno"; store.set("garaaz.who", who); }
 
   // võti tuleb lingist (#k=...) ja jääb telefoni meelde
   const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
@@ -47,9 +48,10 @@
 
   // ---------- kes ma olen ----------
   function renderWho(){
-    $("whoCard").hidden = !!who;
+    $("whoCard").hidden = $("whoBg").hidden = !!who || !key;
     $("whoName").textContent = who || "";
-    $("whoName").parentElement.hidden = !who;
+    $("whoAvatar").textContent = (who || "?").slice(0,1).toUpperCase();
+    $("whoChange").hidden = !who;
   }
   $("whoCard").querySelectorAll("[data-who]").forEach(b => b.onclick = () => {
     if(b.dataset.who === "?"){ $("whoOther").hidden = false; $("whoInput").focus(); return; }
@@ -71,12 +73,15 @@
 
   function renderCar(){
     const c = car();
-    ["carPanel","askPanel","logPanel","dueCard"].forEach(id => $(id).hidden = !c);
-    if(!c){ $("carLine").hidden = true; return; }
-    $("carName").textContent = "Auto andmed (VIN, mootor, läbisõit)";
-    const line = [c.motor || c.engine, c.km ? Number(c.km).toLocaleString("et-EE")+" km" : ""].filter(Boolean).join(" · ");
-    $("carLine").innerHTML = `<b>${esc(`${c.make||""} ${c.model||""}`.trim())}</b>${line ? " · " + esc(line) : ""}`;
-    $("carLine").hidden = false;
+    ["carPanel","askPanel","logPanel","dueCard","hero"].forEach(id => $(id).hidden = !c);
+    if(!c) return;
+    $("carName").textContent = `${c.make||""} ${c.model||""}`.trim() || "Auto andmed";
+    $("heroMake").textContent = c.make || "";
+    $("heroName").textContent = c.model || c.plate;
+    $("carLine").textContent = [c.motor, c.engine && `mootor ${c.engine}`, c.gear].filter(Boolean).join(" · ");
+    $("statKm").textContent = c.km ? Number(c.km).toLocaleString("et-EE") : "–";
+    const insp = String(c.inspection || "").match(/(\d{1,2})\.(\d{4})|(\d{4})-(\d{1,2})/);
+    $("statInsp").textContent = insp ? (insp[1] ? `${insp[1].padStart(2,"0")}.${insp[2]}` : `${insp[4].padStart(2,"0")}.${insp[3]}`) : "–";
     const spec = [["Numbrimärk",c.plate,1],["VIN",c.vin,1],["Mootorikood",c.engine,1],["Mootor",c.motor],["Esmane reg.",c.first],
       ["Läbisõit",c.km?Number(c.km).toLocaleString("et-EE")+" km":""],["Käigukast",c.gear],["Kere",c.body],["Kelle oma",c.owner]];
     $("carSpec").innerHTML = spec.filter(s => s[1]).map(([k,v,m]) => `<div><dt>${k}</dt><dd${m?' class="mono"':''}>${esc(v)}</dd></div>`).join("");
@@ -109,8 +114,12 @@
       ul.innerHTML = all.map(d => `<li class="due ${d.level}"><span class="dot" aria-hidden="true"></span><span>${esc(d.text)}</span></li>`).join("");
     }
     $("pushBtn").hidden = !("serviceWorker" in navigator && "PushManager" in window) || store.get("garaaz.push") === "on";
+    const first = all.find(d => d.level !== "ok");
+    $("nextDue").hidden = !first;
+    if(first){ $("nextDue").className = "next " + first.level; $("nextDueText").textContent = first.text; }
   }
   $("editDue").onclick = () => openCarForm(car(), true);
+  $("nextDue").onclick = () => showTab("hooldus");
   $("kmBtn").onclick = () => { $("kmForm").hidden = !$("kmForm").hidden; $("kmInput").value = car()?.km || ""; $("kmInput").focus(); };
   $("kmForm").onsubmit = async e => {
     e.preventDefault();
@@ -142,7 +151,7 @@
       b.hidden = true;
     }catch(e){
       banner("Teavitusi ei õnnestunud lubada sellel telefonil.");
-    }finally{ b.disabled = false; b.textContent = "🔔 Luba teavitused"; }
+    }finally{ b.disabled = false; b.textContent = "Luba teavitused telefoni"; }
   };
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
@@ -156,8 +165,11 @@
     const year = String(new Date().getFullYear());
     const spent = mine.filter(l => l.status === "tehtud" && String(l.date||"").startsWith(year)).reduce((s,l) => s + num(l.price), 0);
     const allYear = logs.filter(l => l.status === "tehtud" && String(l.date||"").startsWith(year)).reduce((s,l) => s + num(l.price), 0);
-    $("costLine").innerHTML = `Sel aastal sellele autole kulunud: <b>${spent.toFixed(2).replace(".", ",")} €</b>` +
-      (cars.length > 1 ? ` · kõik autod kokku: <b>${allYear.toFixed(2).replace(".", ",")} €</b>` : "");
+    const eur = v => v.toFixed(2).replace(".", ",") + " €";
+    $("costLine").innerHTML = `<span class="muted">Kulud ${year}</span><span class="big">${eur(spent)}</span>` +
+      (cars.length > 1 ? `<span class="muted" style="flex-basis:100%">Kõik autod kokku: <b>${eur(allYear)}</b></span>` : "");
+    $("statYear").textContent = year;
+    $("statCost").textContent = Math.round(spent).toLocaleString("et-EE") + " €";
     if(!mine.length){ ul.innerHTML = `<li><p class="empty">Siin pole veel midagi. Vajuta "+ Lisa töö".</p></li>`; return; }
     ul.innerHTML = mine.map(l => {
       const meta = [fmtDate(l.date), l.part && `<span class="mono">${esc(l.part)}</span>`, l.price && `${esc(l.price)} €`, l.shop && esc(l.shop), l.by && `lisas ${esc(l.by)}`].filter(Boolean).join(" · ");
@@ -212,11 +224,13 @@
     $("carFormTitle").textContent = dueOnly ? "Tähtajad" : c ? "Muuda auto andmeid" : "Lisa auto";
     for(const [k,id] of Object.entries(CF)) $(id).value = c ? (c[k] ?? "") : "";
     $("carFormPanel").classList.toggle("due-only", !!dueOnly);
-    $("carFormPanel").hidden = false;
-    $("carFormPanel").scrollIntoView({behavior:"smooth",block:"start"});
+    $("carFormPanel").hidden = $("sheetBg").hidden = false;
+    $("carFormPanel").scrollTop = 0;
   }
   $("editCar").onclick = () => openCarForm(car());
-  $("cancelCar").onclick = () => { $("carFormPanel").hidden = true; };
+  const closeSheet = () => { $("carFormPanel").hidden = $("sheetBg").hidden = true; };
+  $("cancelCar").onclick = closeSheet;
+  $("sheetBg").onclick = closeSheet;
   $("carForm").onsubmit = async e => {
     e.preventDefault();
     const data = {};
@@ -227,7 +241,7 @@
     const id = editId || data.plate.replace(/[^A-Z0-9]/g,"");
     if(!id){ banner("Numbrimärk on puudu."); return; }
     selId = id; store.set("garaaz.sel", id);
-    if(await write(() => api("/api/car/"+encodeURIComponent(id), "POST", {car:data}))) $("carFormPanel").hidden = true;
+    if(await write(() => api("/api/car/"+encodeURIComponent(id), "POST", {car:data}))) closeSheet();
   };
 
   // ---------- töö vorm ----------
@@ -278,7 +292,7 @@
       const used = o.tuup === "kasutatud";
       const link = safeUrl(o.link);
       const badges = [i === 0 && link ? `<span class="badge best">Soovitan</span>` : "", TYPE[o.tuup] ? `<span class="badge">${TYPE[o.tuup]}</span>` : "", o.pood ? `<span>${esc(o.pood)}</span>` : ""].join("");
-      return `<div class="opt">
+      return `<div class="opt${i === 0 && link ? " best" : ""}">
         <div class="opt-top"><span class="opt-name">${esc(o.nimi||"")}</span>${o.hind?`<span class="opt-price">${esc(o.hind)}</span>`:""}</div>
         <div class="opt-meta">${badges}${code?`<span class="opt-code">${esc(code)}</span>`:""}</div>
         ${o.miks?`<p class="opt-why">${esc(o.miks)}</p>`:""}
@@ -410,6 +424,16 @@
       }
     });
   }
+
+  // ---------- vahekaardid ----------
+  function showTab(t){
+    document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+    document.querySelectorAll(".tab-panel").forEach(p => p.hidden = p.dataset.tab !== t);
+    store.set("garaaz.tab", t);
+    scrollTo({top: 0, behavior: "smooth"});
+  }
+  document.querySelectorAll(".tab").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+  showTab(store.get("garaaz.tab") || "osad");
 
   // ---------- algus ----------
   if(!key){ banner("Ava äpp lingiga, mille said (seal on sinu pere võti)."); $("plates").innerHTML = ""; }
