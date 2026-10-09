@@ -435,8 +435,17 @@
   document.querySelectorAll(".tab").forEach(b => b.onclick = () => showTab(b.dataset.tab));
   showTab(store.get("garaaz.tab") || "osad");
 
+  // ---------- hele / tume ----------
+  function applyTheme(t){
+    if(t === "dark") document.documentElement.dataset.theme = "dark"; else delete document.documentElement.dataset.theme;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0a0c0f" : "#eef1f5";
+    document.querySelectorAll(".theme-btn").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.themeSet === t)));
+  }
+  document.querySelectorAll(".theme-btn").forEach(b => b.onclick = () => { store.set("garaaz.theme", b.dataset.themeSet); applyTheme(b.dataset.themeSet); });
+  applyTheme(store.get("garaaz.theme") === "dark" ? "dark" : "light");
+
   // ---------- iseuuendus: kui uus versioon on üleval, laeme selle (mööda vahemälust) ----------
-  const APP_V = "6";
+  const APP_V = "7";
   async function checkUpdate(){
     try{
       const v = (await (await fetch("version.txt?" + Date.now(), {cache:"no-store"})).text()).trim();
