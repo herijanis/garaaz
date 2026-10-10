@@ -302,6 +302,16 @@ textarea{resize:vertical;min-height:64px}
 
   <div id="banner" class="banner" hidden></div>
 
+  <section class="card rise" id="loginCard" hidden>
+    <h2>Tere tulemast!</h2>
+    <p class="hint">Sisesta pere kood, mille said Richardilt. Seda on vaja ainult üks kord.</p>
+    <form id="loginForm" class="search">
+      <input id="loginCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Pere kood" maxlength="40">
+      <button id="loginBtn" type="submit">Ava</button>
+    </form>
+    <p class="banner" id="loginErr" hidden></p>
+  </section>
+
   <nav class="plates" id="plates" aria-label="Vali auto"></nav>
   <div class="skel" id="skel"></div>
 
@@ -476,7 +486,7 @@ textarea{resize:vertical;min-height:64px}
 document.addEventListener("touchmove",e=>{if(e.touches.length>1)e.preventDefault();},{passive:false});
 let lastTap=0;document.addEventListener("touchend",e=>{const t=Date.now();if(t-lastTap<300&&!e.target.closest("input,textarea,select"))e.preventDefault();lastTap=t;},{passive:false});
 </script>
-<script src="due.js?v=8"></script>
-<script src="app.js?v=8"></script>
+<script src="due.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

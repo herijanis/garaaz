@@ -12,7 +12,7 @@
   if(who === "Herijan" || who === "Isa"){ who = who === "Herijan" ? "Richard" : "Janno"; store.set("garaaz.who", who); }
 
   // võti tuleb lingist (#k=...) ja jääb telefoni meelde
-  const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
+  const m = location.hash.match(/k=([A-Za-z0-9_-]+)/) || location.search.match(/[?&]k=([A-Za-z0-9_-]+)/);
   if(m){ key = m[1]; store.set("garaaz.key", key); history.replaceState(null, "", location.pathname); }
   else key = store.get("garaaz.key");
   // teavituste töötaja (sw.js) vajab võtit, localStoraget ta ei näe
@@ -66,7 +66,8 @@
       banner(""); $("skel").hidden = true; renderAll();
     }catch(e){
       $("plates").innerHTML = ""; $("skel").hidden = true;
-      banner(e.status === 401 ? "See link on vale või vana. Küsi õige link." : "Andmed ei laadinud. Kontrolli internetti ja laadi leht uuesti.");
+      if(e.status === 401){ showLogin(key ? "See kood ei sobi. Proovi uuesti." : ""); return; }
+      banner(e.status === 429 ? e.message : "Andmed ei laadinud. Kontrolli internetti ja laadi leht uuesti.");
     }
   }
   function renderAll(){ renderWho(); renderPlates(); renderCar(); renderDue(); renderLog(); }
@@ -480,7 +481,7 @@
   applyTheme(store.get("garaaz.theme") === "dark" ? "dark" : "light");
 
   // ---------- iseuuendus: kui uus versioon on üleval, laeme selle (mööda vahemälust) ----------
-  const APP_V = "8";
+  const APP_V = "9";
   async function checkUpdate(){
     try{
       const v = (await (await fetch("version.txt?" + Date.now(), {cache:"no-store"})).text()).trim();
@@ -491,6 +492,22 @@
   addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") checkUpdate(); });
 
   // ---------- algus ----------
-  if(!key){ banner("Ava äpp lingiga, mille said (seal on sinu pere võti)."); $("plates").innerHTML = ""; }
+  function showLogin(err){
+    key = null; store.set("garaaz.key", "");
+    $("skel").hidden = true; $("loginCard").hidden = false;
+    $("loginErr").textContent = err || ""; $("loginErr").hidden = !err;
+    setTimeout(() => $("loginCode").focus(), 300);
+  }
+  $("loginForm").onsubmit = async e => {
+    e.preventDefault();
+    const v = $("loginCode").value.trim().replace(/\s+/g, "");
+    if(!v) return;
+    key = v; store.set("garaaz.key", key);
+    $("loginBtn").disabled = true;
+    try{ await api("/api/data"); $("loginCard").hidden = true; window.caches?.open("garaaz-key").then(c => c.put("/key", new Response(key))).catch(() => {}); await refresh(); toast("Sees!"); }
+    catch(err){ showLogin(err.status === 429 ? err.message : "See kood ei sobi. Proovi uuesti."); }
+    finally{ $("loginBtn").disabled = false; }
+  };
+  if(!key){ showLogin(""); }
   else { refresh(); addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") refresh(); }); }
 })();
